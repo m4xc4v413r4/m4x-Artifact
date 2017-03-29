@@ -1,0 +1,8 @@
+## Interface: 70200
+## Title: m4x Artifact
+## Notes: Artifact Power Bar
+## Author: m4xc4v413r4
+## Version: @project-version@
+## SavedVariables: m4xArtifactDB
+
+m4x-Artifact.lua
