@@ -1,4 +1,7 @@
 local dropData = {};
+local name, _ = UnitName("Player");
+local realm = GetRealmName("Player");
+local frameW, frameH = 200, 20;
 m4xArtifactDB = m4xArtifactDB or {};
 
 local akMulti = {
@@ -18,15 +21,18 @@ local frame = CreateFrame("Button", "m4xArtifactFrame", UIParent);
 local dropdown = CreateFrame("Button", "m4xArtifactDropDown");
 local text = frame:CreateFontString(nil, "ARTWORK");
 
-text:SetFont("Fonts\\FRIZQT__.TTF", 15, "OUTLINE");
-text:SetJustifyH("LEFT");
-text:SetTextColor(1, 0.82, 0);
-text:SetPoint("TOP", UIParent, "TOPLEFT", 335, -3);
-
-frame:SetFrameStrata("HIGH");
-frame:SetAllPoints(text);
-
 dropdown.displayMode = "MENU";
+
+frame:SetPoint("CENTER", UIParent);
+frame:SetFrameStrata("HIGH");
+
+text:SetPoint("CENTER", frame);
+text:SetFont("Fonts\\FRIZQT__.TTF", 15, "OUTLINE");
+text:SetTextColor(1, 0.82, 0);
+
+frame:EnableMouse(true);
+frame:SetScript("OnDragStart", frame.StartMoving);
+frame:SetScript("OnDragStop", frame.StopMovingOrSizing);
 
 frame:RegisterEvent("PLAYER_ENTERING_WORLD");
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED");
@@ -34,33 +40,53 @@ frame:RegisterEvent("ARTIFACT_CLOSE");
 frame:RegisterEvent("ARTIFACT_RESPEC_PROMPT");
 frame:RegisterEvent("ARTIFACT_XP_UPDATE");
 
+SLASH_M4XARTIFACT1 = "/mart";
+SlashCmdList["M4XARTIFACT"] = function()
+	if frame:IsShown() then
+		frame:Hide();
+	else
+		frame:Show();
+	end
+end
+
 local function UpdateValues()
-    local itemID, _, _, _, totalXP, pointsSpent, _, _, _, _, _, _, artifactTier = C_ArtifactUI.GetEquippedArtifactInfo();
-    if itemID then
-        local pointsFree, xpToNextPoint = 0, C_ArtifactUI.GetCostForPointAtRank(pointsSpent, artifactTier);
-        while totalXP >= xpToNextPoint do
+	local itemID, _, _, _, totalXP, pointsSpent, _, _, _, _, _, _, artifactTier = C_ArtifactUI.GetEquippedArtifactInfo();
+	if itemID then
+		local pointsFree, xpToNextPoint = 0, C_ArtifactUI.GetCostForPointAtRank(pointsSpent, artifactTier);
+		while totalXP >= xpToNextPoint do
 			totalXP, pointsSpent, pointsFree, xpToNextPoint = totalXP - xpToNextPoint, pointsSpent + 1, pointsFree + 1, C_ArtifactUI.GetCostForPointAtRank(pointsSpent + 1, artifactTier);
 		end
-		if m4xArtifactDB["view"] == "full" then
-			text:SetFormattedText("AP |cff00ff00%d/%d (%.1f%%)|r" .. (pointsFree > 0 and " (+%d)" or ""), totalXP, xpToNextPoint, 100 * totalXP / xpToNextPoint, pointsFree);
-		elseif m4xArtifactDB["view"] == "partial" then
+		if m4xArtifactDB[realm][name]["view"] == "full" then
+			text:SetFormattedText("AP |cff00ff00%s/%s (%.1f%%)|r" .. (pointsFree > 0 and " (+%d)" or ""), BreakUpLargeNumbers(totalXP), BreakUpLargeNumbers(xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree);
+		elseif m4xArtifactDB[realm][name]["view"] == "partial" then
 			text:SetFormattedText("AP |cff00ff00%.1f%%|r" .. (pointsFree > 0 and " (+%d)" or ""), 100 * totalXP / xpToNextPoint, pointsFree);
 		end
+		frameW, frameH = text:GetSize();
+		frame:SetWidth(frameW);
+		frame:SetHeight(frameH);
 		return totalXP, xpToNextPoint, pointsFree;
 	end
-    -- frame:SetShown(itemID and true or false);
 end
 
 frame:SetScript("OnEvent", function(self, event, ...)
 	if event == "PLAYER_ENTERING_WORLD" then
-		if not m4xArtifactDB["view"] then
-			m4xArtifactDB["view"] = "partial";
+		if not m4xArtifactDB[realm] then
+			m4xArtifactDB[realm] = {};
+		end
+		if not m4xArtifactDB[realm][name] then
+			m4xArtifactDB[realm][name] = {};
+		end
+		if not m4xArtifactDB[realm][name]["view"] then
+			m4xArtifactDB[realm][name]["view"] = "partial";
+		end
+		if m4xArtifactDB[realm][name]["point"] then
+			frame:SetPoint(m4xArtifactDB[realm][name]["point"], nil, m4xArtifactDB[realm][name]["relativePoint"], m4xArtifactDB[realm][name]["xOfs"], m4xArtifactDB[realm][name]["yOfs"]);
 		end
 	end
 	UpdateValues();
 end);
 
-local function OnEnter(self)
+frame:SetScript("OnEnter", function(self)
 	local _, akLevel = GetCurrencyInfo(1171);
 	local _, _, itemName, itemIcon, _, pointsSpent = C_ArtifactUI.GetEquippedArtifactInfo()
 	local _, effectiveStat = UnitStat("player", 3);
@@ -69,22 +95,31 @@ local function OnEnter(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM");
 		GameTooltip:SetText(string.format("|T%d:0|t %s", itemIcon, itemName));
 		GameTooltip:AddLine(" ");
-		GameTooltip:AddLine(string.format("Artifact Knowledge Level: |cff00ff00%d (+%d%%)|r", akLevel, akMulti[akLevel] or 0));
+		GameTooltip:AddLine(string.format("Artifact Knowledge Level: |cff00ff00%d (+%s%%)|r", akLevel, BreakUpLargeNumbers(akMulti[akLevel]) or 0));
 
 		if akLevel < 50 then
-			GameTooltip:AddLine(string.format("Next Artifact Knowledge: |cff00ff00%d (+%d%%)|r", akLevel + 1, akMulti[akLevel + 1]));
+			GameTooltip:AddLine(string.format("Next Artifact Knowledge: |cff00ff00%d (+%s%%)|r", akLevel + 1, BreakUpLargeNumbers(akMulti[akLevel + 1])));
 		end
 
 		GameTooltip:AddLine(" ");
 		GameTooltip:AddLine(string.format("Stamina from points: |cff00ff00+%g%% (+%d)|r", pointsSpent * 0.75, effectiveStat - (effectiveStat / ((pointsSpent * 0.75 / 100) + 1))));
-	else
-		GameTooltip:SetText("No Artifact Weapon Equipped");
 	end
 	GameTooltip:Show();
-end
+end);
 
-local function OnLeave(self)
+frame:SetScript("OnLeave", function(self)
 	GameTooltip:Hide();
+end);
+
+local function LockTracker()
+	if not frame:IsMovable() then
+		frame:SetMovable(true);
+		frame:RegisterForDrag("LeftButton");
+	else
+		frame:SetMovable(false);
+		frame:RegisterForDrag();
+		m4xArtifactDB[realm][name]["point"], _, m4xArtifactDB[realm][name]["relativePoint"], m4xArtifactDB[realm][name]["xOfs"], m4xArtifactDB[realm][name]["yOfs"] = frame:GetPoint();
+	end
 end
 
 dropdown.initialize = function(self, dropLevel)
@@ -95,11 +130,18 @@ dropdown.initialize = function(self, dropLevel)
 		dropData.isTitle = 1;
 		dropData.notCheckable = 1;
 
-		dropData.text = "m4x ArtifactBroker";
+		dropData.text = "m4x Artifact";
 		UIDropDownMenu_AddButton(dropData, dropLevel);
 
 		dropData.isTitle = nil;
 		dropData.disabled = nil;
+		dropData.notCheckable = nil;
+
+		dropData.text = "Lock Display";
+		dropData.func = function() LockTracker(); end
+		dropData.checked = not frame:IsMovable();
+		UIDropDownMenu_AddButton(dropData, dropLevel);
+
 		dropData.keepShownOnClick = 1;
 		dropData.hasArrow = 1;
 		dropData.notCheckable = 1;
@@ -111,6 +153,10 @@ dropdown.initialize = function(self, dropLevel)
 		dropData.hasArrow = nil;
 		dropData.keepShownOnClick = nil;
 
+		dropData.text = "Hide Display";
+		dropData.func = function() frame:Hide(); end
+		UIDropDownMenu_AddButton(dropData, dropLevel);
+
 		dropData.text = CLOSE;
 		dropData.func = function() CloseDropDownMenus(); end
 		dropData.checked = nil;
@@ -121,12 +167,12 @@ dropdown.initialize = function(self, dropLevel)
 		dropData.keepShownOnClick = 1;
 		dropData.notCheckable = 1;
 
-		dropData.text = string.format("|cff00ff00%d/%d (%.1f%%)|r" .. (pointsFree > 0 and " (+%d)" or ""), totalXP, xpToNextPoint, 100 * totalXP / xpToNextPoint, pointsFree);
-		dropData.func = function() m4xArtifactDB["view"] = "full"; UpdateValues(); end
+		dropData.text = string.format("|cff00ff00%s/%s (%.1f%%)|r", BreakUpLargeNumbers(totalXP), BreakUpLargeNumbers(xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree);
+		dropData.func = function() m4xArtifactDB[realm][name]["view"] = "full"; UpdateValues(); end
 		UIDropDownMenu_AddButton(dropData, dropLevel);
 
-		dropData.text = string.format("|cff00ff00%.1f%%|r" .. (pointsFree > 0 and " (+%d)" or ""), 100 * totalXP / xpToNextPoint, pointsFree);
-		dropData.func = function() m4xArtifactDB["view"] = "partial"; UpdateValues(); end
+		dropData.text = string.format("|cff00ff00%.1f%%|r", 100 * totalXP / xpToNextPoint, pointsFree);
+		dropData.func = function() m4xArtifactDB[realm][name]["view"] = "partial"; UpdateValues(); end
 		UIDropDownMenu_AddButton(dropData, dropLevel);
 	end
 end
@@ -146,6 +192,3 @@ frame:SetScript("OnMouseUp", function(self, button)
 		end
 	end
 end);
-
-frame:SetScript("OnEnter", OnEnter);
-frame:SetScript("OnLeave", OnLeave);
