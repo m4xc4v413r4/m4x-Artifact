@@ -1,4 +1,4 @@
-## Interface: 70200
+## Interface: 70300
 ## Title: m4x Artifact
 ## Notes: Artifact Power Bar
 ## Author: m4xc4v413r4

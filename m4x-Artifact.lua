@@ -3,17 +3,6 @@ local name, _ = UnitName("Player")
 local realm = GetRealmName("Player")
 m4xArtifactDB = m4xArtifactDB or {}
 
-local akMulti = {
-	25, 50, 90, 140, 200,
-	275, 375, 500, 650, 850,
-	1100, 1400, 1775, 2250, 2850,
-	3600, 4550, 5700, 7200, 9000,
-	11300, 14200, 17800, 22300, 24900,
-	100000, 130000, 170000, 220000, 290000,
-	380000, 490000, 640000, 830000, 1080000,
-	1400000, 1820000, 2370000, 3080000, 4000000
-}
-
 local frame = CreateFrame("Button", "m4xArtifactFrame", UIParent)
 local dropdown = CreateFrame("Button", "m4xArtifactDropDown")
 local text = frame:CreateFontString(nil, "ARTWORK")
@@ -27,7 +16,6 @@ text:SetPoint("CENTER", frame)
 text:SetFont("Fonts\\FRIZQT__.TTF", 15, "OUTLINE")
 text:SetTextColor(1, 0.82, 0)
 
--- frame:SetWidth(150)
 frame:SetHeight(15)
 
 frame:EnableMouse(true)
@@ -41,13 +29,6 @@ frame:RegisterEvent("ARTIFACT_CLOSE")
 frame:RegisterEvent("ARTIFACT_RESPEC_PROMPT")
 frame:RegisterEvent("ARTIFACT_XP_UPDATE")
 
-frame:RegisterEvent("GARRISON_SHIPMENT_RECEIVED")
--- frame:RegisterEvent("SHIPMENT_UPDATE")
--- frame:RegisterEvent("SHIPMENT_CRAFTER_OPENED")
--- frame:RegisterEvent("SHIPMENT_CRAFTER_CLOSED")
--- frame:RegisterEvent("SHIPMENT_CRAFTER_INFO")
-frame:RegisterEvent("GARRISON_LANDINGPAGE_SHIPMENTS")
-
 SLASH_M4XARTIFACT1 = "/mart"
 SlashCmdList["M4XARTIFACT"] = function()
 	if frame:IsShown() then
@@ -57,39 +38,45 @@ SlashCmdList["M4XARTIFACT"] = function()
 	end
 end
 
-local function ResearchNotes()
-	-- GarrisonLandingPageReport_GetShipments(GarrisonLandingPageReport)
-	-- GarrisonLandingPageReportList_UpdateItems()
-	-- C_Garrison.RequestLandingPageShipmentInfo()
-
-	local looseShipments = C_Garrison.GetLooseShipments(LE_GARRISON_TYPE_7_0)
-	if (looseShipments and #looseShipments > 0) then
-		local shipmentNumber = 1
-		for i = shipmentNumber, #looseShipments do
-			if C_Garrison.GetLandingPageShipmentInfoByContainerID(looseShipments[i]) == "Artifact Research Notes" then
-				shipmentNumber = i
-				break
-			end
-		end
-		local name, texture, shipmentCapacity, shipmentsReady, shipmentsTotal, creationTime, duration, timeleftString = C_Garrison.GetLandingPageShipmentInfoByContainerID(looseShipments[shipmentNumber])
-		local haveInBags = GetItemCount("Artifact Research Notes")
-		return haveInBags, timeleftString, shipmentsReady, shipmentCapacity, shipmentsTotal
+local function FormatText(arg)
+	local formatedText = "|cff00ff00%.2f|r|cffff7f00%s|r"
+	if arg >= 1000000000 then
+		arg = string.format(formatedText, arg / 1000000000, "B")
+	elseif arg >= 1000000 then
+		arg = string.format(formatedText, arg / 1000000, "M")
+	elseif arg >= 1000 then
+		arg = string.format(formatedText, arg / 1000, "K")
 	end
+	return arg
+end
+
+local function ColorText(arg)
+	local cR, cG
+	if arg > 0.5 then
+		cR = 255 * (1 - arg) * 2
+		cG = 255
+	elseif arg <= 0.5 then
+		cR = 255
+		cG = 255 * arg * 2
+	end
+	arg = string.format("|cff%02x%02x00", cR, cG)
+	return arg
 end
 
 local function UpdateValues()
-	local itemID, _, _, _, totalXP, pointsSpent, _, _, _, _, _, _, artifactTier = C_ArtifactUI.GetEquippedArtifactInfo()
+	local itemID, _, _, itemIcon, totalXP, pointsSpent, _, _, _, _, _, _, artifactTier = C_ArtifactUI.GetEquippedArtifactInfo()
 	if itemID then
 		local pointsFree, xpToNextPoint = 0, C_ArtifactUI.GetCostForPointAtRank(pointsSpent, artifactTier)
-		while totalXP >= xpToNextPoint do
+		while totalXP >= xpToNextPoint and xpToNextPoint > 0 do
 			totalXP, pointsSpent, pointsFree, xpToNextPoint = totalXP - xpToNextPoint, pointsSpent + 1, pointsFree + 1, C_ArtifactUI.GetCostForPointAtRank(pointsSpent + 1, artifactTier)
 		end
-		if m4xArtifactDB[realm][name]["view"] == "full" then
-			text:SetFormattedText("AP |cff00ff00%s/%s (%.1f%%)|r" .. (pointsFree > 0 and " (+%d)" or ""), BreakUpLargeNumbers(totalXP), BreakUpLargeNumbers(xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
+		if xpToNextPoint < 1 then
+			text:SetFormattedText("Use %d ranks to calculate", pointsFree - 88)
+		elseif m4xArtifactDB[realm][name]["view"] == "full" then
+			text:SetFormattedText("|T%d:0|t AP %s/%s (%s%.1f%%|r)" .. (pointsFree > 0 and " (+%d)" or ""), itemIcon,FormatText(totalXP), FormatText(xpToNextPoint), ColorText(totalXP / xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
 		elseif m4xArtifactDB[realm][name]["view"] == "partial" then
-			text:SetFormattedText("AP |cff00ff00%.1f%%|r" .. (pointsFree > 0 and " (+%d)" or ""), 100 * totalXP / xpToNextPoint, pointsFree)
+			text:SetFormattedText("|T%d:0|t AP %s%.1f%%|r" .. (pointsFree > 0 and " (+%d)" or ""), itemIcon, ColorText(totalXP / xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
 		end
-		ResearchNotes()
 		local frameW = text:GetSize()
 		frame:SetWidth(frameW)
 		return totalXP, xpToNextPoint, pointsFree
@@ -112,36 +99,27 @@ frame:SetScript("OnEvent", function(self, event, ...)
 			
 			frame:SetPoint(m4xArtifactDB[realm][name]["point"], nil, m4xArtifactDB[realm][name]["relativePoint"], m4xArtifactDB[realm][name]["xOfs"], m4xArtifactDB[realm][name]["yOfs"])
 		end
+		if m4xArtifactDB[realm][name]["font"] then
+			text:SetFont("Fonts\\FRIZQT__.TTF", m4xArtifactDB[realm][name]["font"], "OUTLINE");
+		end
 		C_Timer.After(10, UpdateValues)
 		frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
 	end
 	UpdateValues()
-	-- print(GetTime() .. " - " .. event)
 end)
 
 frame:SetScript("OnEnter", function(self)
-	UpdateValues()
-	local haveInBags, timeleftString, shipmentsReady, shipmentCapacity, shipmentsTotal = ResearchNotes()
-	local _, akLevel = GetCurrencyInfo(1171)
 	local _, _, itemName, itemIcon, _, pointsSpent = C_ArtifactUI.GetEquippedArtifactInfo()
-	local _, effectiveStat = UnitStat("player", 3)
-
+	local totalXP, xpToNextPoint = UpdateValues()
+	
 	if HasArtifactEquipped() then
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
 		GameTooltip:SetText(string.format("|T%d:0|t %s", itemIcon, itemName))
 		GameTooltip:AddLine(" ")
-		GameTooltip:AddDoubleLine("Artifact Knowledge Level:", string.format("|cff00ff00%d (+%s%%)|r", akLevel, BreakUpLargeNumbers(akMulti[akLevel] or 0)))
-		if akLevel < 40 then
-			GameTooltip:AddDoubleLine("Next Artifact Knowledge:", string.format("|cff00ff00%d (+%s%%)|r", akLevel + 1, BreakUpLargeNumbers(akMulti[akLevel + 1])))
-			if timeleftString and shipmentsReady and shipmentCapacity and shipmentsTotal then
-				GameTooltip:AddLine(" ")
-				GameTooltip:AddLine("Artifact Research Notes:")
-				GameTooltip:AddDoubleLine(string.format("There are |cff00ff00%d|r in your bags", haveInBags), string.format("|cff00ff00%d|r ready to pickup", shipmentsReady))
-				GameTooltip:AddDoubleLine(string.format("Next one in |cff00ff00%s|r", timeleftString), string.format("|cff00ff00%d/%d|r in progress", (shipmentsTotal or 0) - shipmentsReady, shipmentCapacity))
-			end
+		GameTooltip:AddDoubleLine("Artifact Weapon Rank:", string.format("|cff00ff00%d|r", pointsSpent))
+		if xpToNextPoint > 0 then
+			GameTooltip:AddDoubleLine("AP left for next Rank:", string.format("%s", FormatText(xpToNextPoint - totalXP)))
 		end
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddDoubleLine("Stamina from trait points:", string.format("|cff00ff00+%g%% (+%d)|r", pointsSpent * 0.75, effectiveStat - (effectiveStat / ((pointsSpent * 0.75 / 100) + 1))))
 	end
 	GameTooltip:Show()
 end)
@@ -159,6 +137,33 @@ local function LockTracker()
 		frame:RegisterForDrag()
 		m4xArtifactDB[realm][name]["point"], _, m4xArtifactDB[realm][name]["relativePoint"], m4xArtifactDB[realm][name]["xOfs"], m4xArtifactDB[realm][name]["yOfs"] = frame:GetPoint()
 	end
+end
+
+local function ChooseFont()
+	local _, fSize, _ = text:GetFont()
+	local fSizeInt = math.floor(fSize+0.5);
+	for i = fSizeInt - 3, fSizeInt + 3 do
+		if i > 0 then
+			if i == fSizeInt then
+				dropData.disabled = 1;
+			else
+				dropData.disabled = nil;
+			end
+			dropData.text = i;
+			dropData.func = function() text:SetFont("Fonts\\FRIZQT__.TTF", i, "OUTLINE"); m4xArtifactDB[realm][name]["font"] = i end
+			UIDropDownMenu_AddButton(dropData, 2);
+		end
+	end
+end
+
+local function ResetDisplay()
+	frame:ClearAllPoints();
+
+	frame:SetPoint("CENTER", UIParent);
+	m4xArtifactDB[realm][name]["point"] = nil;
+
+	text:SetFont("Fonts\\FRIZQT__.TTF", 15, "OUTLINE");
+	m4xArtifactDB[realm][name]["font"] = 15;
 end
 
 dropdown.initialize = function(self, dropLevel)
@@ -185,8 +190,17 @@ dropdown.initialize = function(self, dropLevel)
 		dropData.hasArrow = 1
 		dropData.notCheckable = 1
 
+		dropData.value = "reset";
+		dropData.text = "Reset";
+		UIDropDownMenu_AddButton(dropData, dropLevel);
+
+		dropData.value = "view"
 		dropData.text = "View"
 		UIDropDownMenu_AddButton(dropData, dropLevel)
+
+		dropData.value = "font";
+		dropData.text = "Font Size";
+		UIDropDownMenu_AddButton(dropData, dropLevel);
 
 		dropData.value = nil
 		dropData.hasArrow = nil
@@ -202,17 +216,30 @@ dropdown.initialize = function(self, dropLevel)
 		UIDropDownMenu_AddButton(dropData, dropLevel)
 
 	elseif dropLevel == 2 then
-		totalXP, xpToNextPoint, pointsFree = UpdateValues()
+		local totalXP, xpToNextPoint, pointsFree = UpdateValues()
 		dropData.keepShownOnClick = 1
 		dropData.notCheckable = 1
 
-		dropData.text = string.format("|cff00ff00%s/%s (%.1f%%)|r", BreakUpLargeNumbers(totalXP), BreakUpLargeNumbers(xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
-		dropData.func = function() m4xArtifactDB[realm][name]["view"] = "full" UpdateValues() end
-		UIDropDownMenu_AddButton(dropData, dropLevel)
+		if UIDROPDOWNMENU_MENU_VALUE == "reset" then
+			dropData.keepShownOnClick = nil;
 
-		dropData.text = string.format("|cff00ff00%.1f%%|r", 100 * totalXP / xpToNextPoint, pointsFree)
-		dropData.func = function() m4xArtifactDB[realm][name]["view"] = "partial" UpdateValues() end
-		UIDropDownMenu_AddButton(dropData, dropLevel)
+			dropData.text = "|cffff0000Position/Size|r";
+			dropData.func = function() ResetDisplay(); end
+			UIDropDownMenu_AddButton(dropData, dropLevel);
+
+		elseif UIDROPDOWNMENU_MENU_VALUE == "view" and xpToNextPoint > 0 then
+			dropData.text = string.format("%s/%s (%s%.1f%%|r)", FormatText(totalXP), FormatText(xpToNextPoint), ColorText(totalXP / xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
+			dropData.func = function() m4xArtifactDB[realm][name]["view"] = "full" UpdateValues() end
+			UIDropDownMenu_AddButton(dropData, dropLevel)
+
+			dropData.text = string.format("%s%.1f%%|r", ColorText(totalXP / xpToNextPoint), 100 * totalXP / xpToNextPoint, pointsFree)
+			dropData.func = function() m4xArtifactDB[realm][name]["view"] = "partial" UpdateValues() end
+			UIDropDownMenu_AddButton(dropData, dropLevel)
+		
+		elseif UIDROPDOWNMENU_MENU_VALUE == "font" then
+			dropData.keepShownOnClick = nil;
+			ChooseFont();
+		end
 	end
 end
 
@@ -225,7 +252,7 @@ frame:SetScript("OnMouseUp", function(self, button)
 			SocketInventoryItem(16)
 		end
 	elseif button == "RightButton" then
-		itemID = C_ArtifactUI.GetEquippedArtifactInfo()
+		local itemID = C_ArtifactUI.GetEquippedArtifactInfo()
 		if itemID then
 			ToggleDropDownMenu(1, nil, dropdown, self:GetName(), 0, 0)
 		end
